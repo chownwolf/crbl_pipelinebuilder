@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cribl Pipeline Builder</title>
+  <style>
+    :root {
+      --bg: #0d0f18;
+      --bg-card: #161926;
+      --bg-input: #0f1120;
+      --border: #252840;
+      --accent: #00c8ff;
+      --accent-dim: #0099cc;
+      --text: #dde3f5;
+      --text-dim: #7a87a8;
+      --success: #00d68f;
+      --warning: #ffaa00;
+      --danger: #ff4f5a;
+      --radius: 8px;
+      --font-mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 28px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), #6c63ff);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 16px; color: #fff;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+    .header-right {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    label.inline { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+
+    /* Inputs */
+    input[type="text"], select, textarea {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"] { padding: 7px 11px; }
+    input[type="text"]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    select { padding: 7px 11px; cursor: pointer; }
+    textarea {
+      width: 100%;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      resize: vertical;
+      line-height: 1.7;
+      min-height: 120px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; gap: 10px; flex-wrap: wrap;
+    }
+    .card-title {
+      font-size: 11px; font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* Buttons */
+    button {
+      padding: 7px 15px;
+      border-radius: 6px; border: none;
+      cursor: pointer; font-size: 13px; font-weight: 600;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #05080f; }
+    .btn-primary:hover { background: var(--accent-dim); }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-success { background: var(--success); color: #05080f; }
+    .btn-success:hover { opacity: 0.85; }
+    .btn-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+    /* Badges */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 9px; border-radius: 4px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .badge-json   { background: #0f2a45; color: #5aabff; }
+    .badge-kvp    { background: #0a2a1a; color: #3ef5a0; }
+    .badge-csv    { background: #2a1f0a; color: #f5b43e; }
+    .badge-syslog { background: #1f0a2a; color: #b43ef5; }
+    .badge-clf    { background: #2a0f1a; color: #f53e7a; }
+    .badge-elff   { background: #0a1f2a; color: #3ec9f5; }
+    .badge-regex  { background: #2a1a0a; color: #f5783e; }
+    .badge-unknown{ background: #1f1f0a; color: #c8c83e; }
+
+    /* Format info strip */
+    .format-info {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    /* Fields table */
+    .tbl-wrap { overflow-x: auto; }
+    .fields-table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    .fields-table th {
+      text-align: left; padding: 8px 12px;
+      font-size: 10.5px; font-weight: 700; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border);
+    }
+    .fields-table td {
+      padding: 7px 12px; border-bottom: 1px solid var(--border);
+      font-size: 13px; vertical-align: middle;
+    }
+    .fields-table tr:last-child td { border-bottom: none; }
+    .fields-table tr.excluded td { opacity: 0.38; }
+    .fields-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .mono { font-family: var(--font-mono); font-size: 12px; }
+    .clr-accent { color: var(--accent); }
+    .clr-dim { color: var(--text-dim); }
+    .sample-val {
+      font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim);
+      max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      display: block;
+    }
+    .ts-star { color: var(--warning); font-size: 14px; }
+    input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+    .type-sel { padding: 4px 7px; font-size: 12px; }
+    .field-input { width: 160px; }
+    .del-btn {
+      background: none; border: none; color: var(--text-dim);
+      cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1;
+      transition: color 0.15s;
+    }
+    .del-btn:hover { color: var(--danger); }
+
+    /* Options row */
+    .opt-row {
+      display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
+      font-size: 13px;
+    }
+    .opt-row label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+    /* JSON preview */
+    .json-preview {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.85;
+      overflow-x: auto;
+      white-space: pre;
+      max-height: 440px;
+      overflow-y: auto;
+    }
+    .jk { color: #79b8ff; }
+    .js { color: #9ecbff; }
+    .jn { color: #f8c555; }
+    .jb { color: #c084fc; }
+    .jnu { color: #6e6e6e; }
+
+    /* Examples */
+    .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .ex-btn {
+      padding: 4px 10px; font-size: 11px; font-weight: 600;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text-dim); border-radius: 4px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ex-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Timestamp config */
+    .ts-config {
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .ts-config label { color: var(--text-dim); white-space: nowrap; }
+
+    /* Notification toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--success); color: #05080f;
+      padding: 10px 18px; border-radius: 7px;
+      font-weight: 700; font-size: 13px;
+      opacity: 0; transform: translateY(8px);
+      transition: all 0.25s; pointer-events: none; z-index: 99;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 36px; color: var(--text-dim); font-size: 14px; }
+
+    /* Sub-section label */
+    .sub-label { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">C</div>
+    <h1>Cribl Pipeline Builder</h1>
+    <div class="header-right">
+      <label class="inline" for="pipelineName">Pipeline Name</label>
+      <input type="text" id="pipelineName" placeholder="my_pipeline" style="width:200px;" oninput="updatePreview()">
+      <button class="btn-success" onclick="exportJSON()" id="exportBtn" style="display:none;">&#8659; Export .json</button>
+    </div>
+  </header>
+
+  <!-- Log Input -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Sample Log Input</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label class="inline" for="fmtSel">Format</label>
+        <select id="fmtSel" onchange="onFormatChange()">
+          <option value="auto">Auto-Detect</option>
+          <option value="json">JSON</option>
+          <option value="kvp">Key-Value Pairs</option>
+          <option value="csv">CSV</option>
+          <option value="syslog">Syslog</option>
+          <option value="clf">Common Log Format</option>
+          <option value="regex">Custom Regex</option>
+        </select>
+      </div>
+    </div>
+
+    <textarea id="logInput" placeholder="Paste a sample log line here..."></textarea>
+
+    <!-- Custom regex row (hidden unless regex format) -->
+    <div id="regexRow" style="display:none;margin-top:10px;">
+      <div class="sub-label">Named capture group regex (e.g. <code style="color:var(--accent);">(?&lt;field&gt;pattern)</code>)</div>
+      <input type="text" id="regexPat" placeholder="(?<timestamp>\S+)\s+(?<level>\w+)\s+(?<message>.*)" style="width:100%;" oninput="parseLog()">
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" onclick="parseLog()">&#9654; Parse Log</button>
+      <button class="btn-secondary" onclick="clearAll()">Clear</button>
+      <div id="fmtInfo" style="display:none;" class="format-info">
+        <span style="color:var(--text-dim);font-size:12px;">Detected</span>
+        <span id="fmtBadge"></span>
+        <span id="fmtCount" style="color:var(--text-dim);font-size:12px;"></span>
+      </div>
+    </div>
+
+    <!-- Example logs -->
+    <div class="examples">
+      <span style="font-size:11px;color:var(--text-dim);align-self:center;">Examples:</span>
+      <button class="ex-btn" onclick="loadExample('json')">JSON</button>
+      <button class="ex-btn" onclick="loadExample('kvp')">KV Pairs</button>
+      <button class="ex-btn" onclick="loadExample('syslog')">Syslog</button>
+      <button class="ex-btn" onclick="loadExample('clf')">Apache CLF</button>
+      <button class="ex-btn" onclick="loadExample('csv')">CSV</button>
+    </div>
+  </div>
+
+  <!-- Fields Editor -->
+  <div class="card" id="fieldsCard" style="display:none;">
+    <div class="card-header">
+      <span class="card-title">Extracted Fields</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="addField()" style="font-size:12px;padding:5px 11px;">+ Add Field</button>
+        <button class="btn-secondary" onclick="includeAll()" style="font-size:12px;padding:5px 11px;">Check All</button>
+        <button class="btn-secondary" onclick="excludeAll()" style="font-size:12px;padding:5px 11px;">Uncheck All</button>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="fields-table">
+        <thead>
+          <tr>
+            <th style="width:44px;text-align:center;">Use</th>
+            <th>Source Field</th>
+            <th>Sample Value</th>
+            <th style="width:110px;">Type</th>
+            <th>Output Name</th>
+            <th style="width:70px;text-align:center;">Timestamp</th>
+            <th style="width:36px;"></th>
+          </tr>
+        </thead>
+        <tbody id="fieldsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Timestamp config (shown when a ts field is marked) -->
+    <div id="tsConfig" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+      <div class="ts-config">
+        <label>Timestamp field:</label>
+        <span id="tsFieldLabel" class="mono clr-accent"></span>
+        <label>Format:</label>
+        <select id="tsFmt" class="type-sel" onchange="updatePreview()">
+          <option value="auto">Auto-Detect</option>
+          <option value="%Y-%m-%dT%H:%M:%S">ISO 8601 (%Y-%m-%dT%H:%M:%S)</option>
+          <option value="%Y-%m-%dT%H:%M:%S.%f">ISO 8601 w/ ms</option>
+          <option value="%Y-%m-%d %H:%M:%S">%Y-%m-%d %H:%M:%S</option>
+          <option value="%b %d %H:%M:%S">Syslog (%b %d %H:%M:%S)</option>
+          <option value="%d/%b/%Y:%H:%M:%S %z">CLF (%d/%b/%Y:%H:%M:%S %z)</option>
+          <option value="epoch">Unix Epoch (seconds)</option>
+          <option value="epoch_ms">Unix Epoch (ms)</option>
+        </select>
+        <label>Timezone:</label>
+        <select id="tsTz" class="type-sel" onchange="updatePreview()">
+          <option value="UTC">UTC</option>
+          <option value="local">Local</option>
+          <option value="America/New_York">America/New_York</option>
+          <option value="America/Chicago">America/Chicago</option>
+          <option value="America/Los_Angeles">America/Los_Angeles</option>
+          <option value="Europe/London">Europe/London</option>
+          <option value="Europe/Berlin">Europe/Berlin</option>
+          <option value="Asia/Tokyo">Asia/Tokyo</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline Options -->
+  <div class="card" id="optsCard" style="display:none;">
+    <div class="card-header">
+      <span class="card-title">Pipeline Options</span>
+    </div>
+    <div class="opt-row">
+      <label><input type="checkbox" id="optStrict" onchange="updatePreview()"> Strict Fields (drop unlisted)</label>
+      <label><input type="checkbox" id="optClean" onchange="updatePreview()"> Clean Source Fields after extraction</label>
+      <label><input type="checkbox" id="optKeepRaw" checked onchange="updatePreview()"> Keep _raw field</label>
+    </div>
+
+    <!-- KVP options -->
+    <div id="kvpOpts" style="display:none;">
+      <hr class="divider">
+      <div class="opt-row">
+        <span style="color:var(--text-dim);font-size:12px;font-weight:600;">KVP Options</span>
+        <label>Field delimiter <input type="text" id="kvDelim" value=" " style="width:52px;" oninput="updatePreview()"></label>
+        <label>Quote char <input type="text" id="kvQuote" value='"' style="width:52px;" oninput="updatePreview()"></label>
+        <label>Null value <input type="text" id="kvNull" value="-" style="width:52px;" oninput="updatePreview()"></label>
+      </div>
+    </div>
+
+    <!-- CSV options -->
+    <div id="csvOpts" style="display:none;">
+      <hr class="divider">
+      <div class="opt-row">
+        <span style="color:var(--text-dim);font-size:12px;font-weight:600;">CSV Options</span>
+        <label>Delimiter <input type="text" id="csvDelim" value="," style="width:52px;" oninput="updatePreview()"></label>
+        <label>Header fields (comma-sep)
+          <input type="text" id="csvFields" placeholder="auto" style="width:260px;" oninput="parseLog()">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSON Preview -->
+  <div class="card" id="previewCard" style="display:none;">
+    <div class="card-header">
+      <span class="card-title">Pipeline JSON Preview</span>
+      <div style="display:flex;gap:7px;">
+        <button class="btn-secondary" onclick="copyJSON()" style="font-size:12px;padding:5px 11px;">&#9113; Copy</button>
+        <button class="btn-success" onclick="exportJSON()">&#8659; Export .json</button>
+      </div>
+    </div>
+    <div id="jsonPreview" class="json-preview"></div>
+  </div>
+
+</div>
+
+<div id="toast">Saved!</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let fields = [];
+let detectedFmt = null;
+let uid = 0;
+const newId = () => `f${uid++}`;
+
+// ─── Example logs ─────────────────────────────────────────────────────────────
+const EXAMPLES = {
+  json: '{"timestamp":"2024-03-15T14:22:31.456Z","level":"INFO","service":"auth","message":"User login successful","user_id":"u_98421","ip":"192.168.1.45","duration_ms":142,"status":200}',
+  kvp:  'timestamp=2024-03-15T14:22:31Z level=WARN service=api method=POST path=/v1/users status=429 duration_ms=38 user_id="u_12345" msg="Rate limit exceeded"',
+  syslog: 'Mar 15 14:22:31 web01 sshd[2847]: Accepted publickey for deploy from 10.0.1.5 port 52341 ssh2',
+  clf:  '192.168.1.100 - frank [15/Mar/2024:14:22:31 -0500] "GET /index.html HTTP/1.1" 200 2326 "https://example.com/" "Mozilla/5.0"',
+  csv:  'web-prod-01,192.168.1.10,2024-03-15T14:22:31Z,GET,/api/health,200,1842,38'
+};
+
+function loadExample(type) {
+  document.getElementById('logInput').value = EXAMPLES[type];
+  document.getElementById('fmtSel').value = type === 'clf' ? 'clf' : (type === 'syslog' ? 'syslog' : 'auto');
+  parseLog();
+}
+
+// ─── Format detection ─────────────────────────────────────────────────────────
+function detectFmt(log) {
+  log = log.trim();
+  try { JSON.parse(log); return 'json'; } catch(e) {}
+  if (/^<\d+>/.test(log) || /^\w{3}\s{1,2}\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+\S+/.test(log)) return 'syslog';
+  if (/^\S+\s+-\s+\S+\s+\[/.test(log)) return 'clf';
+  const kvHits = (log.match(/\w[\w.\-]*=(?:"[^"]*"|'[^']*'|[^\s,]+)/g) || []).length;
+  if (kvHits >= 2) return 'kvp';
+  if ((log.match(/,/g) || []).length >= 2) return 'csv';
+  return 'unknown';
+}
+
+// ─── Field extraction ─────────────────────────────────────────────────────────
+function mkField(src, val) {
+  return {
+    id: newId(), sourceName: src, outputName: src,
+    sampleValue: String(val ?? ''),
+    type: guessType(String(val ?? ''), src),
+    included: true,
+    isTimestamp: isTs(src, String(val ?? ''))
+  };
+}
+
+function guessType(val, key) {
+  if (isTs(key, val)) return 'timestamp';
+  if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(val.trim())) return 'number';
+  if (/^(true|false)$/i.test(val.trim())) return 'boolean';
+  return 'string';
+}
+
+function isTs(key, val) {
+  if (/^(time|timestamp|ts|datetime|date|@timestamp|eventtime|log_?time|created_at|updated_at|event_time)$/i.test(key)) return true;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(val)) return true;
+  if (/^\w{3}\s{1,2}\d{1,2}\s+\d{2}:\d{2}:\d{2}/.test(val)) return true;
+  if (/^\d{2}\/\w{3}\/\d{4}:\d{2}:\d{2}:\d{2}/.test(val)) return true;
+  return false;
+}
+
+function extractJSON(log) {
+  try {
+    const flat = flatObj(JSON.parse(log));
+    return Object.entries(flat).map(([k, v]) => mkField(k, v));
+  } catch { return []; }
+}
+
+function flatObj(obj, prefix) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      Object.assign(out, flatObj(v, key));
+    } else {
+      out[key] = Array.isArray(v) ? JSON.stringify(v) : v;
+    }
+  }
+  return out;
+}
+
+function extractKVP(log) {
+  const re = /(\w[\w.\-]*)=("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s,]+)/g;
+  const out = []; let m;
+  while ((m = re.exec(log)) !== null) {
+    let val = m[2];
+    if (/^["']/.test(val) && val[0] === val.at(-1)) val = val.slice(1, -1);
+    out.push(mkField(m[1], val));
+  }
+  return out;
+}
+
+function extractCSV(log) {
+  const delim = document.getElementById('csvDelim')?.value || ',';
+  const headerRaw = document.getElementById('csvFields')?.value.trim();
+  const parts = splitCSV(log, delim);
+  const headers = headerRaw ? headerRaw.split(',').map(s => s.trim()) : parts.map((_, i) => `field${i+1}`);
+  return parts.map((v, i) => mkField(headers[i] || `field${i+1}`, v.trim()));
+}
+
+function splitCSV(line, delim) {
+  const re = /("(?:[^"]|"")*"|[^,]*)/g;
+  const out = []; let m;
+  // Simple split (handles quoted fields)
+  const parts = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i <= line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if ((c === delim || c === undefined) && !inQ) { parts.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  return parts;
+}
+
+function extractSyslog(log) {
+  const m = log.match(/^(?:<(\d+)>)?(\w{3}\s{1,2}\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+(\S+?)(?:\[(\d+)\])?:\s+(.*)/s);
+  if (!m) return [];
+  const out = [];
+  if (m[1]) out.push(mkField('priority', m[1]));
+  out.push({ ...mkField('timestamp', m[2]), isTimestamp: true, type: 'timestamp' });
+  out.push(mkField('hostname', m[3]));
+  out.push(mkField('app', m[4]));
+  if (m[5]) out.push(mkField('pid', m[5]));
+  out.push(mkField('message', m[6]));
+  return out;
+}
+
+function extractCLF(log) {
+  // Supports extended (with referer/user-agent) and basic
+  const m = log.match(/^(\S+)\s+(\S+)\s+(\S+)\s+\[([^\]]+)\]\s+"([^"]+)"\s+(\d+)\s+(\S+)(?:\s+"([^"]*)"\s+"([^"]*)")?/);
+  if (!m) return [];
+  const out = [
+    mkField('clientip', m[1]), mkField('ident', m[2]), mkField('auth', m[3]),
+    { ...mkField('timestamp', m[4]), isTimestamp: true, type: 'timestamp' },
+    mkField('request', m[5]), mkField('status', m[6]), mkField('bytes', m[7])
+  ];
+  if (m[8]) out.push(mkField('referer', m[8]));
+  if (m[9]) out.push(mkField('useragent', m[9]));
+  return out;
+}
+
+function extractRegex(log) {
+  const pat = document.getElementById('regexPat')?.value.trim();
+  if (!pat) return [];
+  try {
+    const re = new RegExp(pat);
+    const m = re.exec(log);
+    if (!m || !m.groups) return [];
+    return Object.entries(m.groups).map(([k, v]) => mkField(k, v ?? ''));
+  } catch { return []; }
+}
+
+function doExtract(log, fmt) {
+  switch (fmt) {
+    case 'json':   return extractJSON(log);
+    case 'kvp':    return extractKVP(log);
+    case 'csv':    return extractCSV(log);
+    case 'syslog': return extractSyslog(log);
+    case 'clf':    return extractCLF(log);
+    case 'regex':  return extractRegex(log);
+    default:       return [];
+  }
+}
+
+// ─── Parse action ─────────────────────────────────────────────────────────────
+function parseLog() {
+  const log = document.getElementById('logInput').value.trim();
+  if (!log) return;
+
+  const fmtSel = document.getElementById('fmtSel').value;
+  detectedFmt = fmtSel === 'auto' ? detectFmt(log) : fmtSel;
+
+  fields = doExtract(log, detectedFmt);
+
+  // Update format badge
+  const fi = document.getElementById('fmtInfo');
+  fi.style.display = 'flex';
+  document.getElementById('fmtBadge').innerHTML = `<span class="badge badge-${detectedFmt}">${detectedFmt.toUpperCase()}</span>`;
+  document.getElementById('fmtCount').textContent = `${fields.length} field${fields.length !== 1 ? 's' : ''} detected`;
+
+  // Show/hide option sub-sections
+  document.getElementById('kvpOpts').style.display = detectedFmt === 'kvp' ? 'block' : 'none';
+  document.getElementById('csvOpts').style.display = detectedFmt === 'csv' ? 'block' : 'none';
+  document.getElementById('regexRow').style.display = detectedFmt === 'regex' ? 'block' : 'none';
+
+  // Show cards
+  const hasFields = fields.length > 0;
+  document.getElementById('fieldsCard').style.display  = hasFields ? 'block' : 'none';
+  document.getElementById('optsCard').style.display    = 'block';
+  document.getElementById('previewCard').style.display = 'block';
+  document.getElementById('exportBtn').style.display   = 'inline-block';
+
+  renderFields();
+  updatePreview();
+}
+
+function onFormatChange() {
+  const fmt = document.getElementById('fmtSel').value;
+  document.getElementById('regexRow').style.display = fmt === 'regex' ? 'block' : 'none';
+  const log = document.getElementById('logInput').value.trim();
+  if (log && (fields.length > 0 || fmt === 'regex')) parseLog();
+}
+
+function clearAll() {
+  document.getElementById('logInput').value = '';
+  document.getElementById('regexPat').value = '';
+  document.getElementById('fmtInfo').style.display = 'none';
+  document.getElementById('fieldsCard').style.display = 'none';
+  document.getElementById('optsCard').style.display = 'none';
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('exportBtn').style.display = 'none';
+  fields = []; detectedFmt = null;
+}
+
+// ─── Fields rendering ─────────────────────────────────────────────────────────
+function renderFields() {
+  const tbody = document.getElementById('fieldsBody');
+  tbody.innerHTML = '';
+  fields.forEach(f => {
+    const tr = document.createElement('tr');
+    if (!f.included) tr.classList.add('excluded');
+    tr.innerHTML = `
+      <td style="text-align:center;">
+        <input type="checkbox" ${f.included ? 'checked' : ''} onchange="toggleField('${f.id}',this.checked)">
+      </td>
+      <td><span class="mono clr-accent">${esc(f.sourceName)}</span></td>
+      <td><span class="sample-val" title="${esc(f.sampleValue)}">${esc(trunc(f.sampleValue, 50))}</span></td>
+      <td>
+        <select class="type-sel" onchange="setType('${f.id}',this.value)">
+          <option value="string"    ${f.type==='string'   ?'selected':''}>string</option>
+          <option value="number"    ${f.type==='number'   ?'selected':''}>number</option>
+          <option value="boolean"   ${f.type==='boolean'  ?'selected':''}>boolean</option>
+          <option value="timestamp" ${f.type==='timestamp'?'selected':''}>timestamp</option>
+        </select>
+      </td>
+      <td>
+        <input type="text" class="field-input" value="${esc(f.outputName)}"
+          oninput="setName('${f.id}',this.value)">
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" ${f.isTimestamp ? 'checked' : ''}
+          title="Mark as timestamp" onchange="setTsField('${f.id}',this.checked)">
+        ${f.isTimestamp ? '<span class="ts-star" title="Timestamp">&#9733;</span>' : ''}
+      </td>
+      <td>
+        <button class="del-btn" onclick="removeField('${f.id}')" title="Remove">&times;</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Timestamp config
+  const tsF = fields.find(f => f.isTimestamp && f.included);
+  const tsCfg = document.getElementById('tsConfig');
+  if (tsF) {
+    tsCfg.style.display = 'block';
+    document.getElementById('tsFieldLabel').textContent = tsF.outputName || tsF.sourceName;
+  } else {
+    tsCfg.style.display = 'none';
+  }
+}
+
+function toggleField(id, v) { mutField(id, f => f.included = v); renderFields(); updatePreview(); }
+function setType(id, v)     { mutField(id, f => { f.type = v; if (v === 'timestamp') setTsField(id, true); else { updatePreview(); } }); }
+function setName(id, v)     { mutField(id, f => f.outputName = v); updatePreview(); }
+
+function setTsField(id, v) {
+  fields.forEach(f => f.isTimestamp = false);
+  if (v) mutField(id, f => { f.isTimestamp = true; f.type = 'timestamp'; });
+  renderFields();
+  updatePreview();
+}
+
+function removeField(id) { fields = fields.filter(f => f.id !== id); renderFields(); updatePreview(); }
+function includeAll()    { fields.forEach(f => f.included = true);  renderFields(); updatePreview(); }
+function excludeAll()    { fields.forEach(f => f.included = false); renderFields(); updatePreview(); }
+
+function addField() {
+  fields.push({ id: newId(), sourceName: 'new_field', outputName: 'new_field',
+    sampleValue: '', type: 'string', included: true, isTimestamp: false });
+  renderFields(); updatePreview();
+}
+
+function mutField(id, fn) {
+  const f = fields.find(f => f.id === id);
+  if (f) { fn(f); }
+}
+
+// ─── Pipeline generation ──────────────────────────────────────────────────────
+function buildPipeline() {
+  const name      = document.getElementById('pipelineName').value.trim() || 'my_pipeline';
+  const fmt       = detectedFmt || 'kvp';
+  const strict    = document.getElementById('optStrict').checked;
+  const clean     = document.getElementById('optClean').checked;
+  const keepRaw   = document.getElementById('optKeepRaw').checked;
+  const tsField   = fields.find(f => f.isTimestamp && f.included);
+  const tsFmtVal  = document.getElementById('tsFmt').value;
+  const tsTzVal   = document.getElementById('tsTz').value;
+
+  const fns = [];
+
+  // helper — builds a function object matching Cribl's expected schema
+  const fn = (id, conf, desc = null) => ({
+    filter: 'true', conf, id,
+    disabled: null, final: false, description: desc
+  });
+
+  // 1. Serde / parser
+  if (fmt === 'json') {
+    fns.push(fn('serde', {
+      mode: 'extract', type: 'json', srcField: '_raw', cleanFields: clean
+    }));
+  } else if (fmt === 'kvp') {
+    fns.push(fn('serde', {
+      mode: 'extract', type: 'kvp', srcField: '_raw',
+      cleanFields: clean,
+      delimChar: document.getElementById('kvDelim')?.value || ' ',
+      quoteChar:  document.getElementById('kvQuote')?.value || '"',
+      escapeChar: '\\',
+      nullValue:  document.getElementById('kvNull')?.value  || '-'
+    }));
+  } else if (fmt === 'csv') {
+    const cfRaw  = document.getElementById('csvFields')?.value.trim();
+    const cfList = cfRaw ? cfRaw.split(',').map(s => s.trim()) : fields.map(f => f.sourceName);
+    fns.push(fn('serde', {
+      mode: 'extract', type: 'csv', srcField: '_raw',
+      cleanFields: clean,
+      delimChar: document.getElementById('csvDelim')?.value || ',',
+      fields: cfList
+    }));
+  } else if (fmt === 'syslog') {
+    fns.push(fn('serde', {
+      mode: 'extract', type: 'regex', srcField: '_raw',
+      cleanFields: clean,
+      regex: '^(?:<(?<priority>\\d+)>)?(?<timestamp>\\w{3}\\s{1,2}\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?<hostname>\\S+)\\s+(?<app>\\S+?)(?:\\[(?<pid>\\d+)\\])?:\\s+(?<message>.*)'
+    }));
+  } else if (fmt === 'clf') {
+    fns.push(fn('serde', {
+      mode: 'extract', type: 'clf', srcField: '_raw',
+      cleanFields: clean
+    }));
+  } else if (fmt === 'regex') {
+    const pat = document.getElementById('regexPat')?.value.trim();
+    if (pat) {
+      fns.push(fn('serde', {
+        mode: 'extract', type: 'regex', srcField: '_raw',
+        cleanFields: clean,
+        regex: pat
+      }));
+    }
+  }
+
+  // Declare eval arrays early — timestamp epoch modes may add to them too
+  const renames   = fields.filter(f => f.included && f.outputName && f.outputName !== f.sourceName && f.outputName !== '');
+  const numFields = fields.filter(f => f.included && f.type === 'number' && !renames.find(r => r.id === f.id));
+  const dropped   = fields.filter(f => !f.included);
+  const addArr    = [];
+  const removeArr = [];
+
+  // 2. Timestamp
+  // auto_timestamp valid conf fields: defaultTimezone, timeExpression, strptimeFormat ONLY.
+  // Do NOT include 'type', 'lenient', 'maxLen' — those are not valid Cribl conf keys for
+  // this function and will cause "Cannot read properties of undefined (reading 'name')".
+  // Epoch modes handled via eval instead.
+  if (tsField) {
+    const tsExpr = tsField.outputName || tsField.sourceName;
+    if (tsFmtVal === 'epoch') {
+      addArr.push({ name: '_time', value: tsExpr });
+    } else if (tsFmtVal === 'epoch_ms') {
+      addArr.push({ name: '_time', value: `${tsExpr} / 1000` });
+    } else {
+      const tsConf = { defaultTimezone: tsTzVal, timeExpression: tsExpr };
+      if (tsFmtVal !== 'auto') tsConf.strptimeFormat = tsFmtVal;
+      fns.push(fn('auto_timestamp', tsConf));
+    }
+  }
+
+  // 3. Eval — renames, type coercions, drops, keepRaw
+  renames.forEach(f => {
+    addArr.push({ name: f.outputName, value: f.sourceName });
+    removeArr.push(f.sourceName);
+  });
+
+  numFields.forEach(f => {
+    addArr.push({ name: f.outputName, value: `Number(${f.outputName})` });
+  });
+
+  dropped.forEach(f => removeArr.push(f.sourceName));
+
+  if (!keepRaw) removeArr.push('_raw');
+
+  const safeAdd    = addArr.filter(e => e.name && e.name.trim() !== '');
+  const safeRemove = [...new Set(removeArr.filter(r => r && r.trim() !== ''))];
+
+  if (safeAdd.length || safeRemove.length) {
+    const evalConf = {};
+    if (safeAdd.length)    evalConf.add    = safeAdd;
+    if (safeRemove.length) evalConf.remove = safeRemove;
+    fns.push(fn('eval', evalConf));
+  }
+
+  return {
+    id: name,
+    conf: {
+      asyncFuncTimeout: 1000,
+      functions: fns,
+      groups: {},
+      strictFields: strict,
+      descriptions: { minified: false }
+    }
+  };
+}
+
+// ─── Syntax highlighting ──────────────────────────────────────────────────────
+function highlight(jsonStr) {
+  // HTML-escape first
+  const safe = jsonStr
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Then colorize tokens
+  return safe.replace(
+    /("(?:\\.|[^"\\])*"(\s*:)?)|(\btrue\b|\bfalse\b|\bnull\b)|(-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+    (m, str, colon, kw, num) => {
+      if (str) return colon ? `<span class="jk">${m}</span>` : `<span class="js">${m}</span>`;
+      if (kw)  return kw === 'null' ? `<span class="jnu">${m}</span>` : `<span class="jb">${m}</span>`;
+      if (num !== undefined) return `<span class="jn">${m}</span>`;
+      return m;
+    }
+  );
+}
+
+function updatePreview() {
+  const el = document.getElementById('jsonPreview');
+  if (!el || el.closest('#previewCard').style.display === 'none') return;
+  el.innerHTML = highlight(JSON.stringify(buildPipeline(), null, 2));
+}
+
+// ─── Export / Copy ────────────────────────────────────────────────────────────
+function exportJSON() {
+  const name = document.getElementById('pipelineName').value.trim() || 'my_pipeline';
+  const json = JSON.stringify(buildPipeline(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(blob),
+    download: `${name}.json`
+  });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  toast(`Exported ${name}.json`);
+}
+
+function copyJSON() {
+  navigator.clipboard.writeText(JSON.stringify(buildPipeline(), null, 2))
+    .then(() => toast('Copied to clipboard'));
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function esc(s)        { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function trunc(s, n)   { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2600);
+}
+</script>
+</body>
+</html>
