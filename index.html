@@ -144,7 +144,7 @@
 
     /* Fields table */
     .tbl-wrap { overflow-x: auto; }
-    .fields-table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    .fields-table { width: 100%; border-collapse: collapse; min-width: 920px; }
     .fields-table th {
       text-align: left; padding: 8px 12px;
       font-size: 10.5px; font-weight: 700; color: var(--text-dim);
@@ -170,6 +170,10 @@
     input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
     .type-sel { padding: 4px 7px; font-size: 12px; }
     .field-input { width: 160px; }
+    .expr-input {
+      min-width: 200px; width: 100%; max-width: 420px;
+      font-family: var(--font-mono); font-size: 11.5px;
+    }
     .del-btn {
       background: none; border: none; color: var(--text-dim);
       cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1;
@@ -322,6 +326,7 @@
             <th>Sample Value</th>
             <th style="width:110px;">Type</th>
             <th>Output Name</th>
+            <th>Expression (eval)</th>
             <th style="width:70px;text-align:center;">Timestamp</th>
             <th style="width:36px;"></th>
           </tr>
@@ -453,7 +458,9 @@ function mkField(src, val) {
     sampleValue: String(val ?? ''),
     type: guessType(String(val ?? ''), src),
     included: true,
-    isTimestamp: isTs(src, String(val ?? ''))
+    isTimestamp: isTs(src, String(val ?? '')),
+    isManual: false,
+    evalExpr: ''
   };
 }
 
@@ -637,10 +644,14 @@ function renderFields() {
       <td style="text-align:center;">
         <input type="checkbox" ${f.included ? 'checked' : ''} onchange="toggleField('${f.id}',this.checked)">
       </td>
-      <td><span class="mono clr-accent">${esc(f.sourceName)}</span></td>
-      <td><span class="sample-val" title="${esc(f.sampleValue)}">${esc(trunc(f.sampleValue, 50))}</span></td>
+      <td>${f.isManual
+        ? `<span class="clr-dim" title="Added manually">(manual)</span>`
+        : `<span class="mono clr-accent">${esc(f.sourceName)}</span>`}</td>
+      <td>${f.isManual
+        ? `<span class="clr-dim" style="font-size:12px;">—</span>`
+        : `<span class="sample-val" title="${esc(f.sampleValue)}">${esc(trunc(f.sampleValue, 50))}</span>`}</td>
       <td>
-        <select class="type-sel" onchange="setType('${f.id}',this.value)">
+        <select class="type-sel" onchange="setType('${f.id}',this.value)" ${f.isManual ? 'disabled title="Expression defines the value"' : ''}>
           <option value="string"    ${f.type==='string'   ?'selected':''}>string</option>
           <option value="number"    ${f.type==='number'   ?'selected':''}>number</option>
           <option value="boolean"   ${f.type==='boolean'  ?'selected':''}>boolean</option>
@@ -649,13 +660,19 @@ function renderFields() {
       </td>
       <td>
         <input type="text" class="field-input" value="${esc(f.outputName)}"
+          placeholder="${f.isManual ? 'field name' : ''}"
           oninput="setName('${f.id}',this.value)">
       </td>
-      <td style="text-align:center;">
-        <input type="checkbox" ${f.isTimestamp ? 'checked' : ''}
+      <td>${f.isManual
+        ? `<input type="text" class="field-input expr-input" value="${esc(f.evalExpr)}"
+            placeholder="e.g. bytes + ' B' or field1 + '_' + field2"
+            oninput="setEvalExpr('${f.id}',this.value)">`
+        : `<span class="clr-dim" style="font-size:12px;">—</span>`}</td>
+      <td style="text-align:center;">${f.isManual
+        ? `<span class="clr-dim" title="Timestamp uses parsed fields; parse a log first">—</span>`
+        : `<input type="checkbox" ${f.isTimestamp ? 'checked' : ''}
           title="Mark as timestamp" onchange="setTsField('${f.id}',this.checked)">
-        ${f.isTimestamp ? '<span class="ts-star" title="Timestamp">&#9733;</span>' : ''}
-      </td>
+        ${f.isTimestamp ? '<span class="ts-star" title="Timestamp">&#9733;</span>' : ''}`}</td>
       <td>
         <button class="del-btn" onclick="removeField('${f.id}')" title="Remove">&times;</button>
       </td>`;
@@ -676,6 +693,7 @@ function renderFields() {
 function toggleField(id, v) { mutField(id, f => f.included = v); renderFields(); updatePreview(); }
 function setType(id, v)     { mutField(id, f => { f.type = v; if (v === 'timestamp') setTsField(id, true); else { updatePreview(); } }); }
 function setName(id, v)     { mutField(id, f => f.outputName = v); updatePreview(); }
+function setEvalExpr(id, v) { mutField(id, f => f.evalExpr = v); updatePreview(); }
 
 function setTsField(id, v) {
   fields.forEach(f => f.isTimestamp = false);
@@ -689,8 +707,17 @@ function includeAll()    { fields.forEach(f => f.included = true);  renderFields
 function excludeAll()    { fields.forEach(f => f.included = false); renderFields(); updatePreview(); }
 
 function addField() {
-  fields.push({ id: newId(), sourceName: 'new_field', outputName: 'new_field',
-    sampleValue: '', type: 'string', included: true, isTimestamp: false });
+  fields.push({
+    id: newId(),
+    sourceName: '',
+    outputName: '',
+    sampleValue: '',
+    type: 'string',
+    included: true,
+    isTimestamp: false,
+    isManual: true,
+    evalExpr: ''
+  });
   renderFields(); updatePreview();
 }
 
@@ -712,11 +739,13 @@ function buildPipeline() {
 
   const fns = [];
 
-  // helper — builds a function object matching Cribl's expected schema
-  const fn = (id, conf, desc = null) => ({
-    filter: 'true', conf, id,
-    disabled: null, final: false, description: desc
-  });
+  // helper — builds a function object matching the exported schema
+  const fn = (id, conf, desc = null, final = false) => {
+    const out = { id, filter: 'true', conf };
+    if (desc) out.description = desc;
+    if (final) out.final = true;
+    return out;
+  };
 
   // 1. Serde / parser
   if (fmt === 'json') {
@@ -764,8 +793,10 @@ function buildPipeline() {
   }
 
   // Declare eval arrays early — timestamp epoch modes may add to them too
-  const renames   = fields.filter(f => f.included && f.outputName && f.outputName !== f.sourceName && f.outputName !== '');
-  const numFields = fields.filter(f => f.included && f.type === 'number' && !renames.find(r => r.id === f.id));
+  const renames   = fields.filter(f => f.included && !f.isManual && f.outputName && f.outputName !== f.sourceName && f.outputName !== '');
+  const manualEval = fields.filter(f =>
+    f.included && f.isManual && String(f.outputName || '').trim() !== '' && String(f.evalExpr || '').trim() !== '');
+  const numFields = fields.filter(f => f.included && !f.isManual && f.type === 'number' && !renames.find(r => r.id === f.id));
   const dropped   = fields.filter(f => !f.included);
   const addArr    = [];
   const removeArr = [];
@@ -794,11 +825,15 @@ function buildPipeline() {
     removeArr.push(f.sourceName);
   });
 
+  manualEval.forEach(f => {
+    addArr.push({ name: f.outputName.trim(), value: f.evalExpr.trim() });
+  });
+
   numFields.forEach(f => {
     addArr.push({ name: f.outputName, value: `Number(${f.outputName})` });
   });
 
-  dropped.forEach(f => removeArr.push(f.sourceName));
+  dropped.forEach(f => { if (f.sourceName) removeArr.push(f.sourceName); });
 
   if (!keepRaw) removeArr.push('_raw');
 
@@ -812,14 +847,85 @@ function buildPipeline() {
     fns.push(fn('eval', evalConf));
   }
 
+  // strict mode is encoded as a final eval remove of known excluded fields only.
+  // The exported schema intentionally keeps only functions/output/description.
+  if (strict) {
+    const includedSourceNames = new Set(
+      fields.filter(f => f.included && f.sourceName).map(f => f.sourceName));
+    const strictRemovals = fields
+      .filter(f => !f.isManual && f.sourceName && !includedSourceNames.has(f.sourceName))
+      .map(f => f.sourceName);
+    if (strictRemovals.length) {
+      fns.push(fn('eval', { remove: [...new Set(strictRemovals)] }, 'Strict mode field cleanup', true));
+    }
+  }
+
   return {
     id: name,
     conf: {
-      asyncFuncTimeout: 1000,
       functions: fns,
-      groups: {},
-      strictFields: strict,
-      descriptions: { minified: false }
+      output: 'default',
+      description: `Generated ${fmt.toUpperCase()} parsing pipeline`
+    }
+  };
+}
+
+/** Deep-clone conf objects for export (drops undefined; plain JSON only). */
+function deepCloneConf(o) {
+  if (o === undefined || o === null) return {};
+  try {
+    return JSON.parse(JSON.stringify(o));
+  } catch {
+    return {};
+  }
+}
+
+/** Eval add rows must always include both name and value or imports can fail. */
+function normalizeEvalConf(conf) {
+  const c = deepCloneConf(conf);
+  if (Array.isArray(c.add)) {
+    c.add = c.add
+      .map(row => ({
+        name: row && row.name != null ? String(row.name) : '',
+        value: row && row.value != null ? String(row.value) : ''
+      }))
+      .filter(row => row.name.trim() !== '' && row.value !== '');
+    if (c.add.length === 0) delete c.add;
+  }
+  if (Array.isArray(c.remove)) {
+    c.remove = [...new Set(c.remove.map(r => String(r)).filter(Boolean))];
+    if (c.remove.length === 0) delete c.remove;
+  }
+  return c;
+}
+
+/** Each function: only id, filter, conf, and optionally description / final — matches Cribl pack shape. */
+function normalizeFunctionForExport(f) {
+  const conf = f.id === 'eval' ? normalizeEvalConf(f.conf) : deepCloneConf(f.conf);
+  const out = {
+    id: f.id,
+    filter: f.filter != null ? String(f.filter) : 'true',
+    conf: conf && typeof conf === 'object' ? conf : {}
+  };
+  if (f.description != null && String(f.description).trim() !== '') {
+    out.description = String(f.description);
+  }
+  if (f.final === true) out.final = true;
+  return out;
+}
+
+/**
+ * Canonical pipeline object for preview / export: { id, conf: { functions, output, description } }.
+ * No extra top-level or conf keys (e.g. asyncFuncTimeout, groups).
+ */
+function getPipelineForExport() {
+  const p = buildPipeline();
+  return {
+    id: p.id,
+    conf: {
+      functions: (p.conf.functions || []).map(normalizeFunctionForExport),
+      output: p.conf.output != null ? String(p.conf.output) : 'default',
+      description: p.conf.description != null ? String(p.conf.description) : ''
     }
   };
 }
@@ -844,13 +950,13 @@ function highlight(jsonStr) {
 function updatePreview() {
   const el = document.getElementById('jsonPreview');
   if (!el || el.closest('#previewCard').style.display === 'none') return;
-  el.innerHTML = highlight(JSON.stringify(buildPipeline(), null, 2));
+  el.innerHTML = highlight(JSON.stringify(getPipelineForExport(), null, 2));
 }
 
 // ─── Export / Copy ────────────────────────────────────────────────────────────
 function exportJSON() {
   const name = document.getElementById('pipelineName').value.trim() || 'my_pipeline';
-  const json = JSON.stringify(buildPipeline(), null, 2);
+  const json = JSON.stringify(getPipelineForExport(), null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(blob),
@@ -864,7 +970,7 @@ function exportJSON() {
 }
 
 function copyJSON() {
-  navigator.clipboard.writeText(JSON.stringify(buildPipeline(), null, 2))
+  navigator.clipboard.writeText(JSON.stringify(getPipelineForExport(), null, 2))
     .then(() => toast('Copied to clipboard'));
 }
 
